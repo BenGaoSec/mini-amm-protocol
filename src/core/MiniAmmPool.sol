@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IMiniAmmPool} from "../interfaces/IMiniAmmPool.sol";
+import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
+import {AmmMath} from "../libraries/AmmMath.sol";
+import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
+import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
+
 /// @title MiniAmmPool - x*y=k AMM for two ERC20 tokens
 /// @notice Learning / internal project, NOT production-ready
-contract MiniAmmPool {
+contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
     // ==========
     //  Errors
     // ==========
@@ -23,6 +29,15 @@ contract MiniAmmPool {
     // ==========
     //  Storage - reserves & LP accounting
     // ==========
+    
+    string public constant name = "MiniAMM LP";
+    string public constant symbol = "MLP";
+    uint8 public constant decimals = 18;
+
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
     // TODO: reserves for token0 / token1
     // TODO: totalSupply for LP
     // TODO: mapping of address => LP balance
@@ -47,6 +62,15 @@ contract MiniAmmPool {
     // removeLiquidity
     // swap
 
+    /**  This fuction is design for user to add Liquidity.
+        The first thing is to make sure is this the fisrt LP
+        If this is the first LP, there are has to be Two different token.
+        The two token will decide the ratio and K.
+        If it is not the total supply is not empty, it ok for user to send only one token,
+        but I have to use code to split the token in two token by swap? 
+        but if the customer send two token with random amount is also cannot accpet.
+        And I have make sure the two token is belong to this pool
+        The User also give the  amount0Min, Why? add liquidity also has a slippage?   */
     function addLiquidity(
         uint256 amount0Desired,
         uint256 amount1Desired,
@@ -54,8 +78,15 @@ contract MiniAmmPool {
         uint256 amount1Min,
         address to
     ) external returns (uint256 amount0, uint256 amount1, uint256 liquidity) {
-        // TODO: implement according to flowchart
+        
+
+
     }
+
+
+
+
+
 
     function removeLiquidity(
         uint256 liquidity,
