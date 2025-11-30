@@ -1,0 +1,12 @@
+{
+    "name": "mini-amm-protocol",
+    "version": "1.0.0",
+    "scripts": {
+        "format": "prettier --write \"{src,script,test,docs}/**/*.{js,ts,jsx,tsx,sol,json,md}\"",
+  "format:check": "prettier --check \"{src,script,test,docs}/**/*.{js,ts,jsx,tsx,sol,json,md}\""
+    },
+    "devDependencies": {
+        "prettier": "^3.7.3",
+        "prettier-plugin-solidity": "^2.2.0"
+    }
+}

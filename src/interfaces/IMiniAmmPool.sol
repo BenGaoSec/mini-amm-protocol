@@ -4,6 +4,9 @@ pragma solidity ^0.8.20;
 interface IMiniAmmPool {
     // view
     // TODO: getReserves, totalSupply, balanceOf, etc.
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1);
 
     // actions
     function addLiquidity(
