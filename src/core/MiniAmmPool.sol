@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { IMiniAmmPool } from '../interfaces/IMiniAmmPool.sol';
-import { IERC20Minimal } from '../interfaces/IERC20Minimal.sol';
-import { AmmMath } from '../libraries/AmmMath.sol';
-import { SafeTransferLib } from '../libraries/SafeTransferLib.sol';
-import { ReentrancyGuard } from '../libraries/ReentrancyGuard.sol';
+import { IMiniAmmPool } from "../interfaces/IMiniAmmPool.sol";
+import { IERC20Minimal } from "../interfaces/IERC20Minimal.sol";
+import { AmmMath } from "../libraries/AmmMath.sol";
+import { SafeTransferLib } from "../libraries/SafeTransferLib.sol";
+import { ReentrancyGuard } from "../libraries/ReentrancyGuard.sol";
 
 /// @title MiniAmmPool - x*y=k AMM for two ERC20 tokens
 /// @notice Learning / internal project, NOT production-ready
@@ -32,8 +32,8 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
     //  Storage - reserves & LP accounting
     // ==========
 
-    string public constant name = 'MINI-AMM-LP';
-    string public constant symbol = 'MLP';
+    string public constant name = "MINI-AMM-LP";
+    string public constant symbol = "MLP";
     uint8 public constant decimals = 18;
 
     uint256 public totalSupply;
@@ -48,6 +48,7 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
     // ==========
     //  External view functions
     // ==========
+
     // TODO: getReserves()
     // TODO: totalSupply()
     // TODO: balanceOf(address account)
@@ -57,9 +58,42 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
     //  Core external actions
     // ==========
 
-    function approve(address spender, uint256 value) external returns (bool) {
-        allowance[msg.sender][spender] = value;
-        emit Approval(msg.sender, spender, value);
+    function transfer(address to, uint256 value) external returns (bool) {
+        _transfer(msg.sender, to, value);
+        return true;
+    }
+
+    function approve(address to, uint256 value) external returns (bool) {
+        allowance[msg.sender][to] = value;
+        emit Approal(msg.sender, to, value);
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 value) internal {
+        require(from != address(0), "ADDRESS_FROM_ZERO");
+        require(to != address(0), "ADDRESS_TO_ZERO");
+        uint256 fromBalance = balanceOf[from];
+
+        require(fromBalance >= value, "INSUFFICIENT_BALANCE");
+
+        unchecked {
+            balanceOf[from] = fromBalance - value;
+        }
+        balanceOf[to] += value;
+
+        emit Transfer(from, to, value);
+    }
+
+    function transferFrom(address from, address to, uint256 value) external returns (bool) {
+        uint256 allowed = allowance[from][msg.sender];
+        require(allowed >= value, "INSUFFICIENT_ALLOWANCE");
+        if (allowed != type(uint256).max) {
+            unchecked {
+                allowance[from][msg.sender] -= value;
+            }
+        }
+        _transfer(from, to, value);
+
         return true;
     }
 
@@ -67,8 +101,8 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
     // removeLiquidity
     // swap
 
-    /**  This fuction is design for user to add Liquidity.
-        The first thing is to make sure is this the fisrt LP
+    /**  This fuction is designed for user to add Liquidity.
+        The first thing is to make sure that is the fisrt LP?
         If this is the first LP, there are has to be Two different token.
         The two token will decide the ratio and K.
         If it is not the total supply is not empty, it ok for user to send only one token,
