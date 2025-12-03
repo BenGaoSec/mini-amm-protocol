@@ -9,7 +9,11 @@
   "plugins": ["prettier-plugin-solidity"],
   "overrides": [
     {
-      "files": "*.sol",
+       "files": [
+        "src/**/*.sol",
+        "script/**/*.sol",
+        "test/**/*.sol"
+      ],
       "options": {
         "printWidth": 100,
         "tabWidth": 4
