@@ -4,11 +4,11 @@ pragma solidity ^0.8.20;
 /// @notice Math helpers for x*y=k AMM
 library AmmMath {
     /// @notice Babylonian method for integer square root.
-    function sqrt(uint y) internal pure returns (uint z) {
+    function sqrt(uint256 y) internal pure returns (uint256 z) {
         if (y > 3) {
             //First guess
             z = y;
-            uint x = (z + 1) >> 1;
+            uint256 x = (z + 1) >> 1;
             while (x < z) {
                 z = x;
                 x = (y / z + z) >> 1;
@@ -18,7 +18,7 @@ library AmmMath {
         }
     }
 
-    function min(uint x, uint y) internal pure returns (uint) {
+    function min(uint256 x, uint256 y) internal pure returns (uint256) {
         return x < y ? x : y;
     }
 }
