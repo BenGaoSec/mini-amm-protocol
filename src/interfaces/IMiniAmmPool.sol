@@ -24,10 +24,5 @@ interface IMiniAmmPool {
         address to
     ) external returns (uint256 amount0, uint256 amount1);
 
-    function swap(
-        uint256 amountIn,
-        uint256 minAmountOut,
-        bool zeroForOne,
-        address to
-    ) external returns (uint256 amountOut);
+
 }

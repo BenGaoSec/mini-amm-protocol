@@ -201,14 +201,6 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
         emit LiquidityRemoved(msg.sender, to, amount0, amount1, liquidity);
     }
 
-    function swap(
-        uint256 amountIn,
-        uint256 minAmountOut,
-        bool zeroForOne,
-        address to
-    ) external override nonReentrant returns (uint256 amountOut) {
-        revert("SWAP_NOT_IMPLEMENTED");
-    }
 
     // ==========
     //  LP ERC20 interface (for LP token transfers)
