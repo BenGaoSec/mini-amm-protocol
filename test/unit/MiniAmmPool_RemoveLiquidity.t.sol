@@ -5,8 +5,6 @@ import "forge-std/Test.sol";
 import "../../src/core/MiniAmmPool.sol";
 import "../mocks/MockERC20.sol";
 
-
-
 contract MiniAmmPool_RemoveLiquidity_Test is Test {
     MockERC20 token0;
     MockERC20 token1;
@@ -37,8 +35,7 @@ contract MiniAmmPool_RemoveLiquidity_Test is Test {
         uint256 alice1Before = token1.balanceOf(alice);
 
         vm.startPrank(alice);
-        (uint256 amount0, uint256 amount1) =
-            pool.removeLiquidity(lpBal / 2, 0, 0, alice);
+        (uint256 amount0, uint256 amount1) = pool.removeLiquidity(lpBal / 2, 0, 0, alice);
         vm.stopPrank();
 
         assertGt(amount0, 0);

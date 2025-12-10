@@ -37,6 +37,14 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
         uint256 amount1,
         uint256 liquidity
     );
+    event SWAP(
+        address indexed from,
+        address indexed to,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out
+    );
 
     // ==========
     //  Constants (LP token metadata, etc.)
@@ -159,8 +167,8 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
         // --------------------------------------------------------------------
 
         // Pull tokens from sender according to final amount0/amount1
-        SafeTransferLib.safeTransferFrom(IERC20Minimal(token0), msg.sender, address(this), amount0);
-        SafeTransferLib.safeTransferFrom(IERC20Minimal(token1), msg.sender, address(this), amount1);
+        SafeTransferLib.safeTransferFrom(token0, msg.sender, address(this), amount0);
+        SafeTransferLib.safeTransferFrom(token1, msg.sender, address(this), amount1);
         uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
         uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
         _updateReserves(balance0, balance1);
@@ -192,8 +200,8 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
         _burn(msg.sender, liquidity);
 
         // send user token
-        SafeTransferLib.safeTransfer(IERC20Minimal(token0), to, amount0);
-        SafeTransferLib.safeTransfer(IERC20Minimal(token1), to, amount1);
+        SafeTransferLib.safeTransfer(token0, to, amount0);
+        SafeTransferLib.safeTransfer(token1, to, amount1);
         uint256 newBalance0 = IERC20Minimal(token0).balanceOf(address(this));
         uint256 newBalance1 = IERC20Minimal(token1).balanceOf(address(this));
         _updateReserves(newBalance0, newBalance1);
@@ -201,6 +209,39 @@ contract MiniAmmPool is IMiniAmmPool, ReentrancyGuard {
         emit LiquidityRemoved(msg.sender, to, amount0, amount1, liquidity);
     }
 
+    function swap(
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address to,
+        bytes calldata data
+    ) external override nonReentrant {
+        require(to != address(0), "TO_ZERO");
+        require(amount0Out > 0 || amount1Out > 0, "AMOUNTOUT_ZERO");
+        (uint112 _r0, uint112 _r1) = getReserves();
+        uint256 r0 = uint256(_r0);
+        uint256 r1 = uint256(_r1);
+        require(amount0Out < r0 && amount1Out < r1, "INSUFFICIENT_LIQUIDITY");
+        if (amount0Out > 0) SafeTransferLib.safeTransfer(token0, to, amount0Out);
+        if (amount1Out > 0) SafeTransferLib.safeTransfer(token1, to, amount1Out);
+        // 2) flash swap hook
+        if (data.length > 0) {
+            IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
+        }
+        require(to != token0 && to != token1, "INVALID_TO");
+
+        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
+
+        uint256 amount0In = balance0 > (r0 - amount0Out) ? balance0 - (r0 - amount0Out) : 0;
+        uint256 amount1In = balance1 > (r1 - amount1Out) ? balance1 - (r1 - amount1Out) : 0;
+
+        require(amount0In > 0 || amount1In > 0, "ZERO_INPUT");
+        uint256 bal0Adj = balance0 * 1000 - amount0In * 3;
+        uint256 bal1Adj = balance1 * 1000 - amount1In * 3;
+        require(bal0Adj * bal1Adj >= r0 * r1 * 1000 * 1000, "ERROR_INVARIANT");
+        _updateReserves(balance0, balance1);
+        emit SWAP(msg.sender, to, amount0In, amount1In, amount0Out, amount1Out);
+    }
 
     // ==========
     //  LP ERC20 interface (for LP token transfers)

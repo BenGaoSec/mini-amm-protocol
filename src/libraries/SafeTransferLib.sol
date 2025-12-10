@@ -9,18 +9,13 @@ library SafeTransferLib {
 
     // function transferFrom(address from, address to, uint256 amount) external returns (bool);
 
-    function safeTransfer(IERC20Minimal token, address to, uint256 amount) internal {
-        bool ok = token.transfer(to, amount);
+    function safeTransfer(address token, address to, uint256 amount) internal {
+        bool ok = IERC20Minimal(token).transfer(to, amount);
         require(ok, "TRANSFER_FAILED");
     }
 
-    function safeTransferFrom(
-        IERC20Minimal token,
-        address from,
-        address to,
-        uint256 amount
-    ) internal {
-        bool ok = token.transferFrom(from, to, amount);
+    function safeTransferFrom(address token, address from, address to, uint256 amount) internal {
+        bool ok = IERC20Minimal(token).transferFrom(from, to, amount);
         require(ok, "TRANSFER_FAILED");
     }
 }
