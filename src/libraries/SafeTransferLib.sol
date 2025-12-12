@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IERC20Minimal } from "../interfaces/IERC20Minimal.sol";
+import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 
 /// @notice Extremely small safe transfer helpers (no OZ).
 library SafeTransferLib {

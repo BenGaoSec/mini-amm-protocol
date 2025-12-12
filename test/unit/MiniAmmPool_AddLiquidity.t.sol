@@ -38,13 +38,7 @@ contract MiniAmmPool_AddLiquidity_Test is Test {
         uint256 a1 = 200 ether;
 
         vm.startPrank(alice);
-        (uint256 amount0, uint256 amount1, uint256 liquidity) = pool.addLiquidity(
-            a0,
-            a1,
-            0,
-            0,
-            alice
-        );
+        (uint256 amount0, uint256 amount1, uint256 liquidity) = pool.addLiquidity(a0, a1, 0, 0, alice);
         vm.stopPrank();
 
         uint256 rootK = _sqrt(a0 * a1);
@@ -79,13 +73,8 @@ contract MiniAmmPool_AddLiquidity_Test is Test {
         uint256 expectedAmount1Optimal = (amount0Desired * uint256(r1)) / uint256(r0);
 
         vm.startPrank(alice);
-        (uint256 amount0, uint256 amount1, uint256 liquidity) = pool.addLiquidity(
-            amount0Desired,
-            amount1Desired,
-            0,
-            0,
-            alice
-        );
+        (uint256 amount0, uint256 amount1, uint256 liquidity) =
+            pool.addLiquidity(amount0Desired, amount1Desired, 0, 0, alice);
         vm.stopPrank();
 
         assertEq(amount0, amount0Desired);
@@ -135,13 +124,8 @@ contract MiniAmmPool_AddLiquidity_Test is Test {
         // 3) second add
         // --------------------------------------------------------------------
         vm.startPrank(alice);
-        (uint256 amount0, uint256 amount1, uint256 liquidity) = pool.addLiquidity(
-            amount0Desired,
-            amount1Desired,
-            0,
-            0,
-            alice
-        );
+        (uint256 amount0, uint256 amount1, uint256 liquidity) =
+            pool.addLiquidity(amount0Desired, amount1Desired, 0, 0, alice);
         vm.stopPrank();
 
         // --------------------------------------------------------------------
@@ -176,13 +160,8 @@ contract MiniAmmPool_AddLiquidity_Test is Test {
         uint256 expectedAmount0Optimal = (amount1Desired * uint256(r0)) / uint256(r1);
 
         vm.startPrank(alice);
-        (uint256 amount0, uint256 amount1, uint256 liquidity) = pool.addLiquidity(
-            amount0Desired,
-            amount1Desired,
-            0,
-            0,
-            alice
-        );
+        (uint256 amount0, uint256 amount1, uint256 liquidity) =
+            pool.addLiquidity(amount0Desired, amount1Desired, 0, 0, alice);
         vm.stopPrank();
 
         assertEq(amount1, amount1Desired);

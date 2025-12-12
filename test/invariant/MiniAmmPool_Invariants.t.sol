@@ -7,4 +7,5 @@ contract MiniAmmPool_Invariants_Test {
     // - reserves match token balances
     // - totalSupply == sum of all lp balances
     // - k doesn't drop below initial (within rounding)
-}
+
+    }
