@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-///@title IMiniAmmFactory
-///@notice Factory interface for deploying and tracking MiniAMM pair contracts(Uniswap v2 sytle)
-interface IMiniAMMfactory{
+/// @title IMiniAmmFactory
+/// @notice Factory interface for deploying and tracking MiniAMM Pair/Pool contracts (Uniswap V2 style)
+interface IMiniAmmFactory {
     // =============================================================
     //                            EVENTS
     // =============================================================
 
-    ///@notice Emitted when a new pair is created
-    ///@dev Mirrors Uniswap v2's PairPreated event shape for familiarity
-    event PairCreated (
+    /// @notice Emitted when a new pair (pool) is created
+    /// @dev Mirrors Uniswap V2's PairCreated event shape for familiarity
+    event PairCreated(
         address indexed token0,
         address indexed token1,
         address pair,
@@ -20,14 +20,15 @@ interface IMiniAMMfactory{
     // =============================================================
     //                        VIEW FUNCTIONS
     // =============================================================
+
     /// @notice Returns the pair address for tokenA/tokenB, or address(0) if not created
     function getPair(address tokenA, address tokenB) external view returns (address pair);
-    
+
     /// @notice Returns the pair address at index
-    function allPair(uint256 index) external view returns(address pair);
+    function allPairs(uint256 index) external view returns (address pair);
 
     /// @notice Returns total number of pairs created by this factory
-    function allPairsLength() external view returns(uint256);
+    function allPairsLength() external view returns (uint256);
 
     // =============================================================
     //                      PROTOCOL PARAMETERS
@@ -38,6 +39,7 @@ interface IMiniAMMfactory{
 
     /// @notice Admin address allowed to update feeTo / feeToSetter
     function feeToSetter() external view returns (address);
+
     // =============================================================
     //                      STATE-CHANGING
     // =============================================================

@@ -8,9 +8,9 @@ import {AmmMath} from "../libraries/AmmMath.sol";
 import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
 
-/// @title MiniAmmPool - x*y=k AMM for two ERC20 tokens
+/// @title MiniAmmPair - x*y=k AMM for two ERC20 tokens
 /// @notice Learning / internal project, NOT production-ready
-contract MiniAmmPool is IMiniAmmPair, ReentrancyGuard {
+contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     using AmmMath for uint256;
     // ==========
     //  Errors
