@@ -1,58 +1,21 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
-/// @title IMiniAmmFactory
-/// @notice Factory interface for deploying and tracking MiniAMM Pair/Pool contracts (Uniswap V2 style)
+/// @notice Factory interface (UniswapV2-style)
 interface IMiniAmmFactory {
-    // =============================================================
-    //                            EVENTS
-    // =============================================================
+    event PairCreated(address indexed token0, address indexed token1, address pair, uint256 allPairsLength);
 
-    /// @notice Emitted when a new pair (pool) is created
-    /// @dev Mirrors Uniswap V2's PairCreated event shape for familiarity
-    event PairCreated(
-        address indexed token0,
-        address indexed token1,
-        address pair,
-        uint256 allPairsLength
-    );
-
-    // =============================================================
-    //                        VIEW FUNCTIONS
-    // =============================================================
-
-    /// @notice Returns the pair address for tokenA/tokenB, or address(0) if not created
-    function getPair(address tokenA, address tokenB) external view returns (address pair);
-
-    /// @notice Returns the pair address at index
-    function allPairs(uint256 index) external view returns (address pair);
-
-    /// @notice Returns total number of pairs created by this factory
-    function allPairsLength() external view returns (uint256);
-
-    // =============================================================
-    //                      PROTOCOL PARAMETERS
-    // =============================================================
-
-    /// @notice Address that receives protocol fees (if enabled in your Pair implementation)
+    // views
     function feeTo() external view returns (address);
-
-    /// @notice Admin address allowed to update feeTo / feeToSetter
     function feeToSetter() external view returns (address);
 
-    // =============================================================
-    //                      STATE-CHANGING
-    // =============================================================
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+    function allPairs(uint256 index) external view returns (address pair);
+    function allPairsLength() external view returns (uint256);
 
-    /// @notice Creates a new pair for tokenA/tokenB (order-agnostic)
-    /// @dev Should revert if tokenA == tokenB, tokenA/tokenB is zero, or pair already exists
+    // actions
     function createPair(address tokenA, address tokenB) external returns (address pair);
 
-    /// @notice Sets protocol fee recipient
-    /// @dev Typically restricted to feeToSetter
     function setFeeTo(address _feeTo) external;
-
-    /// @notice Sets the admin for fee parameters
-    /// @dev Typically restricted to current feeToSetter
     function setFeeToSetter(address _feeToSetter) external;
 }

@@ -1,321 +1,304 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {IMiniAmmPair} from "../interfaces/IMiniAmmPair.sol";
+import {IMiniAmmFactory} from "../interfaces/IMiniAmmFactory.sol";
 import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {IMiniAmmCallee} from "../interfaces/IMiniAmmCallee.sol";
 import {AmmMath} from "../libraries/AmmMath.sol";
 import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
+import {UQ112x112} from "../libraries/UQ112x112.sol";
 
-/// @title MiniAmmPair - x*y=k AMM for two ERC20 tokens
-/// @notice Learning / internal project, NOT production-ready
+/// @title MiniAmmPair
+/// @notice UniswapV2-style Pair core (mint/burn/swap/sync/skim).
+/// @dev Learning contract. Not production-ready.
 contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     using AmmMath for uint256;
-    // ==========
-    //  Errors
-    // ==========
-    // TODO: define custom errors (e.g., InsufficientLiquidity, InvalidAmount, etc.)
+    using UQ112x112 for uint224;
 
-    // ==========
-    //  Events
-    // ==========
-    // TODO: Mint, Burn, Swap, Sync
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-    event Sync(uint112 reserve0, uint112 reserve1);
-    event LiquidityAdded(
-        address indexed sender, address indexed to, uint256 amount0, uint256 amount1, uint256 liquidity
-    );
-    event LiquidityRemoved(
-        address indexed from, address indexed to, uint256 amount0, uint256 amount1, uint256 liquidity
-    );
-    event SWAP(
-        address indexed from,
-        address indexed to,
-        uint256 amount0In,
-        uint256 amount1In,
-        uint256 amount0Out,
-        uint256 amount1Out
-    );
+    // =============================================================
+    //                           CUSTOM ERRORS
+    // =============================================================
 
-    // ==========
-    //  Constants (LP token metadata, etc.)
-    // ==========
+    error Forbidden();
+    error AlreadyInitialized();
+    error ZeroAddress();
+    error IdenticalAddresses();
+    error InvalidTo();
+    error InsufficientLiquidity();
+    error InsufficientInputAmount();
+    error InsufficientOutputAmount();
+    error InsufficientLiquidityMinted();
+    error InsufficientLiquidityBurned();
+    error Slippage();
+    error KInvariant();
+    error ReservesOverflow();
+    error InsufficientAllowance();
+    error InsufficientBalance();
+
+    /// @dev Used for functions that are intentionally left as stubs for now.
+    error NotImplemented();
+
+    // =============================================================
+    //                           CONSTANTS
+    // =============================================================
+
     string public constant name = "MINI-AMM-LP";
     string public constant symbol = "MLP";
     uint8 public constant decimals = 18;
 
     uint256 public constant MINIMUM_LIQUIDITY = 1_000;
 
-    // ==========
-    //  Immutable config (pool tokens)
-    // ==========
-    // Match IMiniAmmPair: token0() / token1() return address
-    address public immutable override token0;
-    address public immutable override token1;
+    // =============================================================
+    //                           EVENTS
+    // =============================================================
 
-    // ==========
-    //  Storage - reserves & LP accounting
-    // ==========
-    uint112 private reserve0; // balance of token0, tracked
-    uint112 private reserve1; // balance of token1, tracked
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint256 value);
 
-    uint256 public totalSupply; // LP total supply
-    mapping(address => uint256) public balanceOf; // LP balances
-    mapping(address => mapping(address => uint256)) public allowance; // LP allowances
+    event Mint(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
 
-    // ==========
-    //  Constructor
-    // ==========
-    constructor(address _token0, address _token1) {
-        require(_token0 != _token1, "IDENTICAL_ADDRESSES");
-        require(_token0 != address(0) && _token1 != address(0), "ZERO_ADDRESS");
+    // =============================================================
+    //                           STORAGE
+    // =============================================================
+
+    /// @dev Factory is set at deployment time (UniswapV2 pattern).
+    address public immutable factory;
+
+    address public token0;
+    address public token1;
+
+    /// @dev Reserves are kept in a single storage slot (two uint112 + one uint32 timestamp).
+    uint112 private reserve0; // accessible via getReserves()
+    uint112 private reserve1;
+    uint32 private blockTimestampLast;
+
+    /// @dev Optional TWAP accumulators (UniswapV2-style).
+    uint256 public price0CumulativeLast;
+    uint256 public price1CumulativeLast;
+
+    bool private initialized;
+
+    // =============================================================
+    //                        LP ERC20 STORAGE
+    // =============================================================
+
+    /// @dev Public state variables auto-satisfy the interface getters.
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    // =============================================================
+    //                         CONSTRUCTOR/INIT
+    // =============================================================
+
+    constructor() {
+        factory = msg.sender;
+    }
+
+    /// @notice Called once by the factory right after CREATE2 deployment.
+    function initialize(address _token0, address _token1) external override {
+        if (initialized) revert AlreadyInitialized();
+        if (_token0 == address(0) || _token1 == address(0)) revert ZeroAddress();
 
         token0 = _token0;
         token1 = _token1;
+
+        initialized = true;
     }
 
-    // ==========
-    //  External view functions (interface)
-    // ==========
-    function getReserves() public view override returns (uint112, uint112) {
-        return (reserve0, reserve1);
-    }
+    // =============================================================
+    //                           VIEWS
+    // =============================================================
 
-    // (token0() and token1() are auto-generated by the public immutable state
-    //  variables above and satisfy the IMiniAmmCallee interface.)
-
-    // ==========
-    //  Core external actions (AMM)
-    // ==========
-
-    /**
-     * @notice User adds liquidity to the pool.
-     * @dev amount0Desired / amount1Desired = max amounts user is willing to deposit.
-     *      Contract will compute actual amount0 / amount1 based on current reserves.
-     */
-    function addLiquidity(
-        uint256 amount0Desired,
-        uint256 amount1Desired,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address to
-    ) external override nonReentrant returns (uint256 amount0, uint256 amount1, uint256 liquidity) {
-        require(to != address(0), "TO_ZERO");
-        require(amount0Desired != 0 || amount1Desired != 0, "ZERO_INPUT");
-
-        uint112 _reserve0 = reserve0;
-        uint112 _reserve1 = reserve1;
-        uint256 _totalSupply = totalSupply;
-
-        // --------------------------------------------------------------------
-        // Case A: bootstrap (first liquidity sets initial price)
-        // --------------------------------------------------------------------
-        if (_reserve0 == 0 && _reserve1 == 0) {
-            require(amount0Desired > 0 && amount1Desired > 0, "BOTH_REQUIRED");
-            amount0 = amount0Desired;
-            amount1 = amount1Desired;
-            uint256 rootK = (amount0 * amount1).sqrt();
-            require(rootK > MINIMUM_LIQUIDITY, "INSUFICIENT_MIN_LIQ");
-            liquidity = rootK - MINIMUM_LIQUIDITY;
-            _mintLocked(MINIMUM_LIQUIDITY);
-            _mint(to, liquidity);
-        } else {
-            // --------------------------------------------------------------------
-            // Case B: normal add (respect existing price = reserve1 / reserve0)
-            // --------------------------------------------------------------------
-            require(_reserve0 > 0 && _reserve1 > 0, "BAD_RESERVES");
-
-            // Compute optimal amounts to preserve ratio
-            // Try to use all amount0Desired first
-            uint256 amount1Optimal = (amount0Desired * _reserve1) / _reserve0;
-
-            if (amount1Optimal <= amount1Desired) {
-                // amount0Desired is the limiting side
-                require(amount1Optimal >= amount1Min, "SLIPPAGE_1");
-                amount0 = amount0Desired;
-                amount1 = amount1Optimal;
-            } else {
-                // amount1Desired is the limiting side
-                uint256 amount0Optimal = (amount1Desired * _reserve0) / _reserve1;
-                require(amount0Optimal <= amount0Desired, "BAD_OPTIMAL");
-                require(amount0Optimal >= amount0Min, "SLIPPAGE_0");
-                amount0 = amount0Optimal;
-                amount1 = amount1Desired;
-            }
-
-            require(amount0 >= amount0Min, "SLIPPAGE_0");
-            require(amount1 >= amount1Min, "SLIPPAGE_1");
-            require(amount0 > 0 && amount1 > 0, "INSUFFICIENT_LIQUIDITY");
-            uint256 liquidity0 = (amount0 * _totalSupply) / _reserve0;
-            uint256 liquidity1 = (amount1 * _totalSupply) / _reserve1;
-            liquidity = AmmMath.min(liquidity0, liquidity1);
-            require(liquidity > 0, "INSUFFICIENT_LIQ_MINT");
-            _mint(to, liquidity);
-        }
-
-        // --------------------------------------------------------------------
-        // Move tokens & sync reserves
-        // --------------------------------------------------------------------
-
-        // Pull tokens from sender according to final amount0/amount1
-        SafeTransferLib.safeTransferFrom(token0, msg.sender, address(this), amount0);
-        SafeTransferLib.safeTransferFrom(token1, msg.sender, address(this), amount1);
-        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
-        _updateReserves(balance0, balance1);
-        emit LiquidityAdded(msg.sender, to, amount0, amount1, liquidity);
-    }
-
-    function removeLiquidity(uint256 liquidity, uint256 amount0Min, uint256 amount1Min, address to)
+    /// @notice Returns reserves and last block timestamp (uint32) used for TWAP/cumulative price logic.
+    function getReserves()
         external
+        view
         override
-        nonReentrant
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast)
     {
-        require(to != address(0), "TO_ZERO");
-        require(liquidity != 0, "LIQUIDITY_ZERO");
-        (uint256 _reserve0, uint256 _reserve1) = getReserves();
-        require(_reserve0 > 0 && _reserve1 > 0, "RESERVE_EMPTY");
-        uint256 _totalSupply = totalSupply;
-        require(_totalSupply > 0, "TOTAL_SUPPLY_EMPTY");
-        //We don't trust the reserve, So we take data from the balance directly.
-        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
-
-        amount0 = (liquidity * balance0) / _totalSupply;
-        amount1 = (liquidity * balance1) / _totalSupply;
-        require(amount0 > 0 || amount1 > 0, "INSUFFICIENT_BURN_OUT");
-
-        require(amount0 >= amount0Min, "SLIPPAGE_0");
-        require(amount1 >= amount1Min, "SLIPPAGE_1");
-        _burn(msg.sender, liquidity);
-
-        // send user token
-        SafeTransferLib.safeTransfer(token0, to, amount0);
-        SafeTransferLib.safeTransfer(token1, to, amount1);
-        uint256 newBalance0 = IERC20Minimal(token0).balanceOf(address(this));
-        uint256 newBalance1 = IERC20Minimal(token1).balanceOf(address(this));
-        _updateReserves(newBalance0, newBalance1);
-
-        emit LiquidityRemoved(msg.sender, to, amount0, amount1, liquidity);
+        return (reserve0, reserve1, blockTimestampLast);
     }
 
-    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data)
-        external
-        override
-        nonReentrant
-    {
-        require(to != address(0), "TO_ZERO");
-        require(to != token0 && to != token1, "INVALID_TO");
-        require(amount0Out > 0 || amount1Out > 0, "AMOUNTOUT_ZERO");
-        (uint112 _r0, uint112 _r1) = getReserves();
-        uint256 r0 = uint256(_r0);
-        uint256 r1 = uint256(_r1);
-        require(amount0Out < r0 && amount1Out < r1, "INSUFFICIENT_LIQUIDITY");
-        if (amount0Out > 0) SafeTransferLib.safeTransfer(token0, to, amount0Out);
-        if (amount1Out > 0) SafeTransferLib.safeTransfer(token1, to, amount1Out);
-        // 2) flash swap hook
-        if (data.length > 0) {
-            IMiniAmmCallee(to).miniAmmCall(msg.sender, amount0Out, amount1Out, data);
-        }
+    // =============================================================
+    //                         LP ERC20 LOGIC
+    // =============================================================
 
-        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
-
-        uint256 amount0In = balance0 > (r0 - amount0Out) ? balance0 - (r0 - amount0Out) : 0;
-        uint256 amount1In = balance1 > (r1 - amount1Out) ? balance1 - (r1 - amount1Out) : 0;
-
-        require(amount0In > 0 || amount1In > 0, "ZERO_INPUT");
-        uint256 bal0Adj = balance0 * 1000 - amount0In * 3;
-        uint256 bal1Adj = balance1 * 1000 - amount1In * 3;
-        require(bal0Adj * bal1Adj >= r0 * r1 * 1000 * 1000, "ERROR_INVARIANT");
-        _updateReserves(balance0, balance1);
-        emit SWAP(msg.sender, to, amount0In, amount1In, amount0Out, amount1Out);
-    }
-
-    // ==========
-    //  LP ERC20 interface (for LP token transfers)
-    // ==========
-    function transfer(address to, uint256 value) external returns (bool) {
-        _transfer(msg.sender, to, value);
-        return true;
-    }
-
-    function approve(address spender, uint256 value) external returns (bool) {
+    function approve(address spender, uint256 value) external override returns (bool) {
         allowance[msg.sender][spender] = value;
         emit Approval(msg.sender, spender, value);
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 value) external returns (bool) {
-        uint256 allowed = allowance[from][msg.sender];
-        require(allowed >= value, "INSUFFICIENT_ALLOWANCE");
+    function transfer(address to, uint256 value) external override returns (bool) {
+        _transfer(msg.sender, to, value);
+        return true;
+    }
 
+    function transferFrom(address from, address to, uint256 value) external override returns (bool) {
+        uint256 allowed = allowance[from][msg.sender];
+
+        // Standard ERC20 behavior: if allowance is max uint256, treat as infinite.
         if (allowed != type(uint256).max) {
+            if (allowed < value) revert InsufficientAllowance();
             unchecked {
                 allowance[from][msg.sender] = allowed - value;
             }
+            emit Approval(from, msg.sender, allowance[from][msg.sender]);
         }
 
         _transfer(from, to, value);
         return true;
     }
 
-    // ==========
-    //  Internal helpers
-    // ==========
     function _transfer(address from, address to, uint256 value) internal {
-        require(from != address(0), "ADDRESS_FROM_ZERO");
-        require(to != address(0), "ADDRESS_TO_ZERO");
+        if (to == address(0)) revert ZeroAddress();
 
-        uint256 fromBalance = balanceOf[from];
-        require(fromBalance >= value, "INSUFFICIENT_BALANCE");
+        uint256 bal = balanceOf[from];
+        if (bal < value) revert InsufficientBalance();
 
         unchecked {
-            balanceOf[from] = fromBalance - value;
+            balanceOf[from] = bal - value;
+            balanceOf[to] += value;
         }
-        balanceOf[to] += value;
 
         emit Transfer(from, to, value);
     }
 
     function _mint(address to, uint256 value) internal {
-        require(to != address(0), "TO_ZERO");
+        if (to == address(0)) revert ZeroAddress();
+
         totalSupply += value;
         balanceOf[to] += value;
+
         emit Transfer(address(0), to, value);
     }
 
-    function _mintLocked(uint256 value) internal {
-        //Intentionally mint to address(0)
-        totalSupply += value;
-        balanceOf[address(0)] += value;
-        emit Transfer(address(0), address(0), value);
-    }
-
     function _burn(address from, uint256 value) internal {
-        require(from != address(0), "ADDRESS_FROM_ZERO");
         uint256 bal = balanceOf[from];
-        require(bal >= value, "INSUFFICIENT_BALANCE");
+        if (bal < value) revert InsufficientBalance();
+
         unchecked {
             balanceOf[from] = bal - value;
+            totalSupply -= value;
         }
-        totalSupply -= value;
+
         emit Transfer(from, address(0), value);
     }
 
-    function _updateReserves(uint256 balance0, uint256 balance1) internal {
-        require(balance0 <= type(uint112).max && balance1 <= type(uint112).max, "RESERVES_OVERFLOW");
-        reserve0 = uint112(balance0);
-        reserve1 = uint112(balance1);
-        emit Sync(reserve0, reserve1);
+    // =============================================================
+    //                           CORE AMM
+    // =============================================================
+
+    /// @notice Placeholder. Implement later (LP minting logic).
+    function mint(address /*to*/) external override returns (uint256 /*liquidity*/) {
+        revert NotImplemented();
     }
 
-    // TODO:
-    // - _updateReserves(uint256 balance0, uint256 balance1)
-    // - _mintLiquidity(address to, uint256 liquidity)
-    // - _burnLiquidity(address from, uint256 liquidity)
-    // - internal wrappers around SafeTransferLib for token0/token1
+    /// @notice Placeholder. Implement later (LP burning logic).
+    function burn(address /*to*/) external override returns (uint256 /*amount0*/, uint256 /*amount1*/) {
+        revert NotImplemented();
+    }
+
+    /// @notice Placeholder. Implement later (swap + optional flash swap callback).
+    function swap(
+        uint256 /*amount0Out*/,
+        uint256 /*amount1Out*/,
+        address /*to*/,
+        bytes calldata /*data*/
+    ) external override {
+        revert NotImplemented();
+    }
+
+    /// @notice Transfers any token balances above the stored reserves to `to`.
+    /// @dev Useful for recovering accidental transfers; does not update reserves.
+    function skim(address to) external override {
+        if (to == address(0)) revert ZeroAddress();
+
+        uint256 bal0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 bal1 = IERC20Minimal(token1).balanceOf(address(this));
+
+        uint256 r0 = uint256(reserve0);
+        uint256 r1 = uint256(reserve1);
+
+        if (bal0 > r0) {
+            uint256 excess0 = bal0 - r0;
+            bool ok0 = IERC20Minimal(token0).transfer(to, excess0);
+            require(ok0, "T0_TRANSFER_FAIL");
+        }
+
+        if (bal1 > r1) {
+            uint256 excess1 = bal1 - r1;
+            bool ok1 = IERC20Minimal(token1).transfer(to, excess1);
+            require(ok1, "T1_TRANSFER_FAIL");
+        }
+    }
+
+    /// @notice Updates reserves to match current balances and updates TWAP accumulators.
+    function sync() external override {
+        // Read balances and update the stored reserves.
+        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
+
+        _upadate(balance0, balance1, reserve0, reserve1);
+    }
+
+    /// @dev Updates reserves + blockTimestampLast and accumulates price * timeElapsed for TWAP.
+    ///      Uses the OLD reserves for price accumulation, then writes the NEW reserves.
+    function _upadate(
+        uint256 balance0,
+        uint256 balance1,
+        uint112 _reserve0,
+        uint112 _reserve1
+    ) internal {
+        // 1) Bounds check BEFORE narrowing (prevents silent truncation).
+        if (balance0 > type(uint112).max || balance1 > type(uint112).max) revert ReservesOverflow();
+
+        // 2) Timestamp compression to uint32 (mod 2^32).
+        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+
+        // 3) TWAP hook: accumulate using OLD reserves and time elapsed.
+        unchecked {
+            // uint32 wrap-around is intentional and matches UniswapV2 behavior.
+            uint32 timeElapsed = blockTimestamp - blockTimestampLast;
+
+            if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
+                // Fixed-point price in UQ112x112:
+                // price0 = (reserve1 << 112) / reserve0, price1 = (reserve0 << 112) / reserve1
+                uint256 price0 = (uint256(_reserve1) << 112) / uint256(_reserve0);
+                uint256 price1 = (uint256(_reserve0) << 112) / uint256(_reserve1);
+
+                // Accumulate integral(price) over time: sum(price * dt).
+                price0CumulativeLast += price0 * uint256(timeElapsed);
+                price1CumulativeLast += price1 * uint256(timeElapsed);
+            }
+        }
+
+        // 4) Commit NEW reserves to storage.
+        uint112 newReserve0 = uint112(balance0);
+        uint112 newReserve1 = uint112(balance1);
+
+        reserve0 = newReserve0;
+        reserve1 = newReserve1;
+        blockTimestampLast = blockTimestamp;
+
+        // 5) Emit NEW reserves.
+        emit Sync(newReserve0, newReserve1);
+    }
+
+    // =============================================================
+    //                           INTERNALS
+    // =============================================================
 }
