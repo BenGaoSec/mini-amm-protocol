@@ -15,10 +15,7 @@ interface IMiniAmmPair {
     function token1() external view returns (address);
 
     /// @notice Returns reserves and last block timestamp (uint32) used for TWAP/cumulative price logic.
-    function getReserves()
-        external
-        view
-        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 
     // =============================================================
     //                             INIT

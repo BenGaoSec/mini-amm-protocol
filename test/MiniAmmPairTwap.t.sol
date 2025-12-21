@@ -98,7 +98,7 @@ contract MiniAmmPairTwapTest is Test {
         assertEq(p1After - p1Before, expectedPrice1 * dt, "price1 cumulative delta mismatch");
 
         // Timestamp should update to the new warp time.
-        (, , uint32 ts1) = pair.getReserves();
+        (,, uint32 ts1) = pair.getReserves();
         assertEq(uint256(ts1), 1_000 + dt, "blockTimestampLast mismatch after second sync");
     }
 

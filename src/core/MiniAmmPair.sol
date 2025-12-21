@@ -89,6 +89,13 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     uint256 public price1CumulativeLast;
 
     bool private initialized;
+    // =============================================================
+    //                           MODIFIER
+    // =============================================================
+    modifier onlyFactory() {
+        if (msg.sender != factory) revert Forbidden();
+        _;
+    }
 
     // =============================================================
     //                        LP ERC20 STORAGE
@@ -108,7 +115,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     }
 
     /// @notice Called once by the factory right after CREATE2 deployment.
-    function initialize(address _token0, address _token1) external override {
+    function initialize(address _token0, address _token1) external override onlyFactory {
         if (initialized) revert AlreadyInitialized();
         if (_token0 == address(0) || _token1 == address(0)) revert ZeroAddress();
 
@@ -178,7 +185,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     }
 
     function _mint(address to, uint256 value) internal {
-        if (to == address(0)) revert ZeroAddress();
+        if (to == address(0) && value != MINIMUM_LIQUIDITY) revert ZeroAddress();
 
         totalSupply += value;
         balanceOf[to] += value;
@@ -203,22 +210,62 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     // =============================================================
 
     /// @notice Placeholder. Implement later (LP minting logic).
-    function mint(address /*to*/) external override returns (uint256 /*liquidity*/) {
-        revert NotImplemented();
+    function mint(address to) external override returns (uint256 liquidity) {
+        if (to == address(0)) revert ZeroAddress();
+        uint112 _reserve0 = reserve0;
+        uint112 _reserve1 = reserve1;
+        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
+        uint256 amount0 = balance0 - uint256(_reserve0);
+        uint256 amount1 = balance1 - uint256(_reserve1);
+        if (amount0 == 0 || amount1 == 0) revert InsufficientInputAmount();
+        uint256 _totolSupply = totalSupply;
+        if (_totolSupply == 0) {
+            //calculate the liquidity
+            uint256 rootK = AmmMath.sqrt(amount0 * amount1);
+            liquidity = rootK - MINIMUM_LIQUIDITY;
+            _mint(address(0), MINIMUM_LIQUIDITY);
+            _mint(to, liquidity);
+        } else {
+            uint256 liquidity0 = (amount0 * _totolSupply) / _reserve1;
+            uint256 liquidity1 = (amount1 * _totolSupply) / _reserve0;
+
+            liquidity = AmmMath.min(liquidity0, liquidity1);
+            if (liquidity == 0) revert InsufficientLiquidityMinted();
+            _mint(to, liquidity);
+        }
+        // Update reserves + TWAP accumulators, then emit Mint
+        _upadate(balance0, balance1, _reserve0, _reserve1);
+        emit Mint(msg.sender, amount0, amount1);
     }
 
     /// @notice Placeholder. Implement later (LP burning logic).
-    function burn(address /*to*/) external override returns (uint256 /*amount0*/, uint256 /*amount1*/) {
+    function burn(
+        address /*to*/
+    )
+        external
+        override
+        returns (
+            uint256, /*amount0*/
+            uint256 /*amount1*/
+        )
+    {
         revert NotImplemented();
     }
 
     /// @notice Placeholder. Implement later (swap + optional flash swap callback).
     function swap(
-        uint256 /*amount0Out*/,
-        uint256 /*amount1Out*/,
-        address /*to*/,
+        uint256,
+        /*amount0Out*/
+        uint256,
+        /*amount1Out*/
+        address,
+        /*to*/
         bytes calldata /*data*/
-    ) external override {
+    )
+        external
+        override
+    {
         revert NotImplemented();
     }
 
@@ -257,17 +304,12 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
 
     /// @dev Updates reserves + blockTimestampLast and accumulates price * timeElapsed for TWAP.
     ///      Uses the OLD reserves for price accumulation, then writes the NEW reserves.
-    function _upadate(
-        uint256 balance0,
-        uint256 balance1,
-        uint112 _reserve0,
-        uint112 _reserve1
-    ) internal {
+    function _upadate(uint256 balance0, uint256 balance1, uint112 _reserve0, uint112 _reserve1) internal {
         // 1) Bounds check BEFORE narrowing (prevents silent truncation).
         if (balance0 > type(uint112).max || balance1 > type(uint112).max) revert ReservesOverflow();
 
         // 2) Timestamp compression to uint32 (mod 2^32).
-        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+        uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
 
         // 3) TWAP hook: accumulate using OLD reserves and time elapsed.
         unchecked {
