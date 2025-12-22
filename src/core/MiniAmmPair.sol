@@ -235,22 +235,42 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
             _mint(to, liquidity);
         }
         // Update reserves + TWAP accumulators, then emit Mint
-        _upadate(balance0, balance1, _reserve0, _reserve1);
+        _update(balance0, balance1, _reserve0, _reserve1);
         emit Mint(msg.sender, amount0, amount1);
     }
 
     /// @notice Placeholder. Implement later (LP burning logic).
-    function burn(
-        address /*to*/
-    )
-        external
-        override
-        returns (
-            uint256, /*amount0*/
-            uint256 /*amount1*/
-        )
-    {
-        revert NotImplemented();
+    function burn(address to) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
+        if (to == address(0)) revert ZeroAddress();
+
+        // Old reserves (accounting state)
+        uint112 _reserve0 = reserve0;
+        uint112 _reserve1 = reserve1;
+        // Current balances (real state)
+        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
+        // Liquidity to burn is whatever LP the Pair currently holds
+        uint256 liquidity = balanceOf[address(this)];
+        if (liquidity == 0) revert InsufficientLiquidityBurned();
+        uint256 _totalSupply = totalSupply;
+        if (_totalSupply == 0) revert InsufficientLiquidity(); // or a better-named error
+
+        // Pro-rata amounts out based on current balances
+        // (matches UniswapV2: uses balances to include any fees/accidental transfers)
+        amount0 = (liquidity * balance0) / _totalSupply;
+        amount1 = (liquidity * balance1) / _totalSupply;
+        if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurned();
+
+        // Burn the LP held by the Pair
+        _burn(address(this), liquidity);
+        // Transfer underlying tokens out
+        SafeTransferLib.safeTransfer(token0, to, amount0);
+        SafeTransferLib.safeTransfer(token1, to, amount1);
+        // Update reserves after transfers
+        uint256 newBalance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 newBalance1 = IERC20Minimal(token1).balanceOf(address(this));
+        _update(newBalance0, newBalance1, _reserve0, _reserve1);
+        emit Burn(msg.sender, amount0, amount1, to);
     }
 
     /// @notice Placeholder. Implement later (swap + optional flash swap callback).
@@ -282,14 +302,12 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
 
         if (bal0 > r0) {
             uint256 excess0 = bal0 - r0;
-            bool ok0 = IERC20Minimal(token0).transfer(to, excess0);
-            require(ok0, "T0_TRANSFER_FAIL");
+            SafeTransferLib.safeTransfer(token0, to, excess0);
         }
 
         if (bal1 > r1) {
             uint256 excess1 = bal1 - r1;
-            bool ok1 = IERC20Minimal(token1).transfer(to, excess1);
-            require(ok1, "T1_TRANSFER_FAIL");
+            SafeTransferLib.safeTransfer(token1, to, excess1);
         }
     }
 
@@ -299,19 +317,19 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
         uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
 
-        _upadate(balance0, balance1, reserve0, reserve1);
+        _update(balance0, balance1, reserve0, reserve1);
     }
 
     /// @dev Updates reserves + blockTimestampLast and accumulates price * timeElapsed for TWAP.
     ///      Uses the OLD reserves for price accumulation, then writes the NEW reserves.
-    function _upadate(uint256 balance0, uint256 balance1, uint112 _reserve0, uint112 _reserve1) internal {
-        // 1) Bounds check BEFORE narrowing (prevents silent truncation).
+    function _update(uint256 balance0, uint256 balance1, uint112 _reserve0, uint112 _reserve1) internal {
+        // 1 Bounds check BEFORE narrowing (prevents silent truncation).
         if (balance0 > type(uint112).max || balance1 > type(uint112).max) revert ReservesOverflow();
 
-        // 2) Timestamp compression to uint32 (mod 2^32).
+        // 2 Timestamp compression to uint32 (mod 2^32).
         uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
 
-        // 3) TWAP hook: accumulate using OLD reserves and time elapsed.
+        // 3 TWAP hook: accumulate using OLD reserves and time elapsed.
         unchecked {
             // uint32 wrap-around is intentional and matches UniswapV2 behavior.
             uint32 timeElapsed = blockTimestamp - blockTimestampLast;
@@ -328,7 +346,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
             }
         }
 
-        // 4) Commit NEW reserves to storage.
+        // 4 Commit NEW reserves to storage.
         uint112 newReserve0 = uint112(balance0);
         uint112 newReserve1 = uint112(balance1);
 
@@ -336,7 +354,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         reserve1 = newReserve1;
         blockTimestampLast = blockTimestamp;
 
-        // 5) Emit NEW reserves.
+        // 5 Emit NEW reserves.
         emit Sync(newReserve0, newReserve1);
     }
 

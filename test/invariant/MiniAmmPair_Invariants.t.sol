@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract MiniAmmPool_Invariants_Test {
+contract MiniAmmPair_Invariants_Test {
     // TODO: fuzz / invariant harness
     // invariants:
     // - reserves match token balances
