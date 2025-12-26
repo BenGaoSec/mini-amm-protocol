@@ -219,16 +219,16 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         uint256 amount0 = balance0 - uint256(_reserve0);
         uint256 amount1 = balance1 - uint256(_reserve1);
         if (amount0 == 0 || amount1 == 0) revert InsufficientInputAmount();
-        uint256 _totolSupply = totalSupply;
-        if (_totolSupply == 0) {
+        uint256 _totalSupply = totalSupply;
+        if (_totalSupply == 0) {
             //calculate the liquidity
             uint256 rootK = AmmMath.sqrt(amount0 * amount1);
             liquidity = rootK - MINIMUM_LIQUIDITY;
             _mint(address(0), MINIMUM_LIQUIDITY);
             _mint(to, liquidity);
         } else {
-            uint256 liquidity0 = (amount0 * _totolSupply) / _reserve1;
-            uint256 liquidity1 = (amount1 * _totolSupply) / _reserve0;
+            uint256 liquidity0 = (amount0 * _totalSupply) / uint256(_reserve0);
+            uint256 liquidity1 = (amount1 * _totalSupply) / uint256(_reserve1);
 
             liquidity = AmmMath.min(liquidity0, liquidity1);
             if (liquidity == 0) revert InsufficientLiquidityMinted();
@@ -274,19 +274,49 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     }
 
     /// @notice Placeholder. Implement later (swap + optional flash swap callback).
-    function swap(
-        uint256,
-        /*amount0Out*/
-        uint256,
-        /*amount1Out*/
-        address,
-        /*to*/
-        bytes calldata /*data*/
-    )
+    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data)
         external
         override
+        nonReentrant
     {
-        revert NotImplemented();
+        // ---- 0) basic checks ----
+        if (amount0Out == 0 && amount1Out == 0) revert InsufficientOutputAmount();
+        uint112 _reserve0 = reserve0;
+        uint112 _reserve1 = reserve1;
+        if (amount0Out >= _reserve0 || amount1Out >= _reserve1) revert InsufficientLiquidity();
+
+        // UniswapV2: to cannot be token0/token1
+        if (to == token0 || to == token1) revert InvalidTo();
+        // ---- 1) optimistic transfer out ----
+        if (amount0Out > 0) SafeTransferLib.safeTransfer(token0, to, amount0Out);
+        if (amount1Out > 0) SafeTransferLib.safeTransfer(token1, to, amount1Out);
+
+        // ---- 2) optional callback (flash swap) ----
+        if (data.length > 0) {
+            IMiniAmmCallee(to).miniAmmCall(msg.sender, amount0Out, amount1Out, data);
+        }
+
+        // ---- 3) observe balances after transfers/callback ----
+        uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
+        // amountIn = max(balance - (reserve - amountOut), 0)
+        uint256 amount0In =
+            balance0 > uint256(_reserve0) - amount0Out ? balance0 - (uint256(_reserve0) - amount0Out) : 0;
+        uint256 amount1In =
+            balance1 > uint256(_reserve1) - amount1Out ? balance1 - (uint256(_reserve1) - amount1Out) : 0;
+        if (amount0In == 0 && amount1In == 0) revert InsufficientInputAmount();
+
+        // ---- 4) fee + invariant check (0.3%) ----
+        // adjusted = balance*1000 - amountIn*3
+        uint256 balance0Adjusted = balance0 * 1000 - amount0In * 3;
+        uint256 balance1Adjusted = balance1 * 1000 - amount1In * 3;
+        // require(balance0Adjusted * balance1Adjusted >= reserve0*reserve1*1000^2)
+        if (balance0Adjusted * balance1Adjusted < uint256(_reserve0) * uint256(_reserve1) * 1000 * 1000) {
+            revert KInvariant();
+        }
+        // ---- 5) update reserves + emit ----
+        _update(balance0, balance1, _reserve0, _reserve1);
+        emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1Out, to);
     }
 
     /// @notice Transfers any token balances above the stored reserves to `to`.

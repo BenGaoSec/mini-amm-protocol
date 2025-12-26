@@ -8,9 +8,9 @@ contract MiniAmmPair_MintBurn_Fuzz_Test is PairFixture {
         // 1) Constrain fuzz inputs to a sane range:
         // - Not too small (avoid MINIMUM_LIQUIDITY-related reverts)
         // - Not too large (avoid reserve uint112 / overflow edge cases)
-        uint256 a0 = bound(uint256(raw0), 1e9, 1e24);  
+        uint256 a0 = bound(uint256(raw0), 1e9, 1e24);
         uint256 a1 = bound(uint256(raw1), 1e9, 1e24);
-        
+
         // 2) Mint LP to alice
         uint256 liq = _addLiquidity(alice, a0, a1);
         assertGt(liq, 0, "liq > 0");
