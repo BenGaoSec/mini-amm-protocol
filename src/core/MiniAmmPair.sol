@@ -357,7 +357,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         if (balance0 > type(uint112).max || balance1 > type(uint112).max) revert ReservesOverflow();
 
         // 2 Timestamp compression to uint32 (mod 2^32).
-        uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
+        uint32 blockTimestamp = uint32(block.timestamp);
 
         // 3 TWAP hook: accumulate using OLD reserves and time elapsed.
         unchecked {
@@ -367,8 +367,8 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
             if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
                 // Fixed-point price in UQ112x112:
                 // price0 = (reserve1 << 112) / reserve0, price1 = (reserve0 << 112) / reserve1
-                uint256 price0 = (uint256(_reserve1) << 112) / uint256(_reserve0);
-                uint256 price1 = (uint256(_reserve0) << 112) / uint256(_reserve1);
+                uint256 price0 = UQ112x112.encode(_reserve1).uqdiv(_reserve0);
+                uint256 price1 = UQ112x112.encode(_reserve0).uqdiv(_reserve1);
 
                 // Accumulate integral(price) over time: sum(price * dt).
                 price0CumulativeLast += price0 * uint256(timeElapsed);
