@@ -74,3 +74,87 @@
 
 ---
 
+### 2025-12-28 — Router Liquidity MVP Execution Todo: ADD / REMOVE (90–120 min)
+
+**Scope:** ERC20↔ERC20 only. Liquidity only. No swaps.
+
+#### Hard constraints
+
+* [ ] No ETH/WETH
+* [ ] No multi-hop / path logic
+* [ ] No permit / fee-on-transfer support
+* [ ] Deliverables limited to:
+
+  * [ ] `addLiquidity(...)`
+  * [ ] `removeLiquidity(...)`
+
+---
+
+Understood. Here is the same **Execution Checklist** style, with a clear boundary decision baked in.
+
+### 2025-12-29 — Router Liquidity v0: Add (First Liquidity Only) (60–90 min)
+
+## Deliverable (DoD)
+
+* [ ] `addLiquidity(...)` compiles
+* [ ] **First-liquidity path works** (reserves `(0,0)`): uses `(amountADesired, amountBDesired)`
+* [ ] Tokens go **directly** `msg.sender -> pair` (router holds **0** token balance after)
+* [ ] `pair.mint(to)` returns `liquidity > 0`
+* [ ] Tests: **1 success + 1 revert** green
+* [ ] `forge test` fully green
+
+## Boundaries (Decision)
+
+* [ ] **ADD** the low-cost, invariant boundaries now (prevents foot-guns, doesn’t expand scope)
+* [ ] **DEFER** reserve-based optimal quoting branch to tomorrow
+
+## Steps (Implementation)
+
+### 1) Add boundaries (5–10 min)
+
+* [ ] `deadline`: revert if `block.timestamp > deadline`
+* [ ] `tokenA != tokenB`
+* [ ] `tokenA != address(0)` and `tokenB != address(0)`
+* [ ] `to != address(0)` (recommended)
+* [ ] `amountADesired > 0` and `amountBDesired > 0`
+* [ ] Min checks (cheap + consistent):
+
+  * [ ] revert if `amountADesired < amountAMin`
+  * [ ] revert if `amountBDesired < amountBMin`
+
+### 2) Pair get/create (5 min)
+
+* [ ] `pair = factory.getPair(tokenA, tokenB)`
+* [ ] if `pair == address(0)` → `pair = factory.createPair(tokenA, tokenB)`
+
+### 3) Transfer in + mint (10–15 min)
+
+* [ ] `transferFrom(tokenA, msg.sender, pair, amountADesired)`
+* [ ] `transferFrom(tokenB, msg.sender, pair, amountBDesired)`
+* [ ] `liquidity = IMiniAmmPair(pair).mint(to)`
+* [ ] return `(amountADesired, amountBDesired, liquidity)`
+
+## Tests (20–30 min)
+
+### 1) Success
+
+* [ ] `testAddLiquidity_firstLiquidity_success`
+
+  * [ ] pair created
+  * [ ] `liquidity > 0`
+  * [ ] router token balances are 0 (optional assert, but recommended)
+
+### 2) Revert
+
+* [ ] `testAddLiquidity_revert_expiredDeadline`
+
+## Finish (5 min)
+
+* [ ] `forge fmt`
+* [ ] `forge test`
+* [ ] Commit: `feat(router): addLiquidity v0 first-liquidity + boundaries + minimal tests`
+
+If you paste your Router’s existing custom errors (or confirm you use `require` strings), I’ll rewrite the “Add boundaries” block to match your exact naming conventions so the style is consistent across the repo.
+
+---
+
