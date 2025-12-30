@@ -98,14 +98,27 @@ contract MiniAmmRouter {
         ensure(deadline)
         returns (uint256 amountA, uint256 amountB)
     {
-        // TODO: implement
-        // - transfer LP from msg.sender to pair
-        // - (amount0, amount1) = pair.burn(to)
-        // - map (amount0, amount1) to (amountA, amountB)
-        tokenA; tokenB; liquidity; amountAMin; amountBMin; to;
-        amountA = 0;
-        amountB = 0;
-        revert NotImplemented();
+        
+        if (to == address(0)) revert ZeroAddress();
+
+        address pair = IMiniAmmFactory(factory).getPair(tokenA, tokenB);
+        if (pair == address(0)) revert PairNotFound();
+
+        // Needed only for mapping (amount0, amount1) -> (amountA, amountB)
+        (address token0,) = _sortTokens(tokenA, tokenB);
+
+        // In V2-style, LP token is the Pair itself (ERC20). Transfer LP into the pair, then burn.
+        pair.safeTransferFrom(msg.sender, pair, liquidity);
+
+        // Burn sends underlying tokens to `to` and returns amounts in (token0, token1) order.
+        (uint256 amount0, uint256 amount1) = IMiniAmmPair(pair).burn(to);
+
+        // Map to the caller's token order (A/B).
+        (amountA, amountB) = (tokenA == token0) ? (amount0, amount1) : (amount1, amount0);
+
+        if (amountA < amountAMin) revert InsufficientAAmount();
+        if (amountB < amountBMin) revert InsufficientBAmount();
+
     }
 
     // =============================================================

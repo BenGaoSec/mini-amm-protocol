@@ -11,7 +11,8 @@
 - [x] `forge test --match-path 'test/unit/pair/*Swap*.t.sol' -vv` is green
 
 
----
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 ### 2025-12-26 — Minimal Swap Closed Loop (90 min)
 
 * [x] Docs: `docs/swap.md` presentable skeleton
@@ -27,6 +28,9 @@
 **Ship criteria**
 
 * [x] `forge test --match-path 'test/unit/pair/*Swap*.t.sol' -vv` is green
+
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 
 ### 2025-12-27 — Pair Core Clarity: Skim / Sync / TWAP (90 min)
 
@@ -72,7 +76,8 @@
   * revert: `InsufficientLiquidity`
   * strengthen success: `amountIn` in `Swap` event > 0 and matches expected transfer-in
 
----
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 
 ### 2025-12-28 — Router Liquidity MVP Execution Todo: ADD / REMOVE (90–120 min)
 
@@ -88,9 +93,8 @@
   * [ ] `addLiquidity(...)`
   * [ ] `removeLiquidity(...)`
 
----
-
-Understood. Here is the same **Execution Checklist** style, with a clear boundary decision baked in.
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 
 ### 2025-12-29 — Router Liquidity v0: Add (First Liquidity Only) (60–90 min)
 
@@ -156,5 +160,40 @@ Understood. Here is the same **Execution Checklist** style, with a clear boundar
 
 If you paste your Router’s existing custom errors (or confirm you use `require` strings), I’ll rewrite the “Add boundaries” block to match your exact naming conventions so the style is consistent across the repo.
 
----
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
+
+### 2025-12-30 — RemoveLiquidity Closed Loop (60 min)
+
+#### DoD
+
+* [ ] `removeLiquidity()` compiles
+* [ ] Tests: **2 success + 3 revert** are green
+* [ ] Correct mapping `(amount0, amount1) -> (amountA, amountB)`
+* [ ] Min constraints enforced (`amountA >= amountAMin`, `amountB >= amountBMin`)
+* [ ] Scope stop: no permit, no fee-on, no extra features
+
+#### Boundaries (must revert)
+
+* [ ] Pair not found
+* [ ] `amountA < amountAMin`
+* [ ] `amountB < amountBMin`
+* [ ] LP `transferFrom` fails (no approval / insufficient LP)
+* [ ] Pair `burn` reverts (Pair-level rule)
+
+#### Execution (ordered)
+
+* [ ] Implement `removeLiquidity()`:
+
+  * getPair -> sortTokens -> `pair.safeTransferFrom(msg.sender, pair, liquidity)` -> `(amount0,amount1)=pair.burn(to)` -> map to `(amountA,amountB)` -> min checks -> return
+* [ ] Test: `testRemoveLiquidity_success_full`
+* [ ] Test: `testRemoveLiquidity_success_partial`
+* [ ] Test: `testRemoveLiquidity_revert_pairNotFound`
+* [ ] Test: `testRemoveLiquidity_revert_insufficientAAmount`
+* [ ] Test: `testRemoveLiquidity_revert_insufficientBAmount`
+* [ ] Run tests, fix interface mismatches, rerun
+* [ ] Commit: `router: removeLiquidity + tests`
+
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 
