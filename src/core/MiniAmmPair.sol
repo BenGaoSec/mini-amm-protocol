@@ -219,10 +219,10 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         uint256 amount1 = balance1 - uint256(_reserve1);
         if (amount0 == 0 || amount1 == 0) revert InsufficientInputAmount();
         uint256 _totalSupply = totalSupply;
-            // [Security] Why burn MINIMUM_LIQUIDITY?
-            // To prevent the "First Liquidity Provider" attack. 
-            // It ensures the share price (LP token price) cannot be manipulated 
-            // so high that small users suffer from massive rounding errors.
+        // [Security] Why burn MINIMUM_LIQUIDITY?
+        // To prevent the "First Liquidity Provider" attack.
+        // It ensures the share price (LP token price) cannot be manipulated
+        // so high that small users suffer from massive rounding errors.
         if (_totalSupply == 0) {
             //calculate the liquidity
             uint256 rootK = AmmMath.sqrt(amount0 * amount1);
@@ -290,8 +290,8 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
         if (to == token0 || to == token1) revert InvalidTo();
 
         // [Architecture] Optimistic Transfers.
-        // We send tokens out BEFORE checking the K-invariant. 
-        // This allows the caller to perform a "Flash Swap" if `data.length > 0`. 
+        // We send tokens out BEFORE checking the K-invariant.
+        // This allows the caller to perform a "Flash Swap" if `data.length > 0`.
         // The final K-Invariant check acts as the ultimate gatekeeper to ensure solvency.
         // ---- 1) optimistic transfer out ----
         if (amount0Out > 0) SafeTransferLib.safeTransfer(token0, to, amount0Out);
@@ -327,7 +327,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
 
     /// @notice Transfers any token balances above the stored reserves to `to`.
     /// @dev Useful for recovering accidental transfers; does not update reserves.
-    function skim(address to) external override {
+    function skim(address to) external override nonReentrant {
         if (to == address(0)) revert ZeroAddress();
 
         uint256 bal0 = IERC20Minimal(token0).balanceOf(address(this));
@@ -348,7 +348,7 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
     }
 
     /// @notice Updates reserves to match current balances and updates TWAP accumulators.
-    function sync() external override {
+    function sync() external override nonReentrant {
         // Read balances and update the stored reserves.
         uint256 balance0 = IERC20Minimal(token0).balanceOf(address(this));
         uint256 balance1 = IERC20Minimal(token1).balanceOf(address(this));
@@ -370,10 +370,10 @@ contract MiniAmmPair is IMiniAmmPair, ReentrancyGuard {
             // uint32 wrap-around is intentional and matches UniswapV2 behavior.
             uint32 timeElapsed = blockTimestamp - blockTimestampLast;
 
-            // [Logic] Heart of the Price Oracle. 
-            // We use OLD reserves and time elapsed to calculate cumulative price. 
-            // This ensures that even if price is manipulated in the CURRENT block, 
-            // the impact on the TWAP (Time-Weighted Average Price) is minimal. 
+            // [Logic] Heart of the Price Oracle.
+            // We use OLD reserves and time elapsed to calculate cumulative price.
+            // This ensures that even if price is manipulated in the CURRENT block,
+            // the impact on the TWAP (Time-Weighted Average Price) is minimal.
             // This is the primary defense against Flash Loan price manipulation.
             if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
                 // Fixed-point price in UQ112x112:

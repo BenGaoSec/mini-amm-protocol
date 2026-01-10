@@ -14,16 +14,17 @@ contract MiniAmmRouter_AddLiquidity_v0_Test is RouterFixture {
         uint256 deadline = block.timestamp;
 
         vm.startPrank(alice);
-        (uint256 amountA, uint256 amountB, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0, // amountAMin
-            0, // amountBMin
-            bob,
-            deadline
-        );
+        (uint256 amountA, uint256 amountB, uint256 liq) =
+            router.addLiquidity(
+                address(tokenA),
+                address(tokenB),
+                a,
+                b,
+                0, // amountAMin
+                0, // amountBMin
+                bob,
+                deadline
+            );
         vm.stopPrank();
 
         // v0 expectation: returns desired amounts
@@ -56,16 +57,7 @@ contract MiniAmmRouter_AddLiquidity_v0_Test is RouterFixture {
         // vm.expectRevert(MiniAmmRouter.Expired.selector);
         vm.expectRevert();
 
-        router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            1e18,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        router.addLiquidity(address(tokenA), address(tokenB), 1e18, 1e18, 0, 0, alice, deadline);
 
         vm.stopPrank();
     }

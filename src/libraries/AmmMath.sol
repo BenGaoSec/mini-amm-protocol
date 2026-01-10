@@ -43,14 +43,21 @@ library AmmMath {
     /// @notice Returns floor(log2(x)) for x > 0.
     function log2(uint256 x) internal pure returns (uint256 r) {
         unchecked {
-            if (x >> 128 > 0) { x >>= 128; r += 128; }
-            if (x >> 64  > 0) { x >>= 64;  r += 64;  }
-            if (x >> 32  > 0) { x >>= 32;  r += 32;  }
-            if (x >> 16  > 0) { x >>= 16;  r += 16;  }
-            if (x >> 8   > 0) { x >>= 8;   r += 8;   }
-            if (x >> 4   > 0) { x >>= 4;   r += 4;   }
-            if (x >> 2   > 0) { x >>= 2;   r += 2;   }
-            if (x >> 1   > 0) {            r += 1;   }
+            if (x >> 128 > 0) x >>= 128;
+            r += 128;
+            if (x >> 64 > 0) x >>= 64;
+            r += 64;
+            if (x >> 32 > 0) x >>= 32;
+            r += 32;
+            if (x >> 16 > 0) x >>= 16;
+            r += 16;
+            if (x >> 8 > 0) x >>= 8;
+            r += 8;
+            if (x >> 4 > 0) x >>= 4;
+            r += 4;
+            if (x >> 2 > 0) x >>= 2;
+            r += 2;
+            if (x >> 1 > 0) r += 1;
         }
     }
 }

@@ -16,16 +16,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
 
         // Add liquidity; mint LP to alice so she can burn it.
         vm.startPrank(alice);
-        (,, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        (,, uint256 liq) = router.addLiquidity(address(tokenA), address(tokenB), a, b, 0, 0, alice, deadline);
         vm.stopPrank();
 
         MiniAmmPair p = _pair();
@@ -38,15 +29,8 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         vm.startPrank(alice);
         p.approve(address(router), liq);
 
-        (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            liq,
-            0,
-            0,
-            bob,
-            deadline
-        );
+        (uint256 amountA, uint256 amountB) =
+            router.removeLiquidity(address(tokenA), address(tokenB), liq, 0, 0, bob, deadline);
         vm.stopPrank();
 
         assertGt(amountA, 0, "amountA > 0");
@@ -75,16 +59,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         uint256 deadline = block.timestamp;
 
         vm.startPrank(alice);
-        (,, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        (,, uint256 liq) = router.addLiquidity(address(tokenA), address(tokenB), a, b, 0, 0, alice, deadline);
         vm.stopPrank();
 
         MiniAmmPair p = _pair();
@@ -98,15 +73,8 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         vm.startPrank(alice);
         p.approve(address(router), burnLiq);
 
-        (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            burnLiq,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        (uint256 amountA, uint256 amountB) =
+            router.removeLiquidity(address(tokenA), address(tokenB), burnLiq, 0, 0, alice, deadline);
         vm.stopPrank();
 
         assertGt(amountA, 0, "amountA > 0");
@@ -130,15 +98,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         vm.startPrank(alice);
         vm.expectRevert(MiniAmmRouter.PairNotFound.selector);
 
-        router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        router.removeLiquidity(address(tokenA), address(tokenB), 1e18, 0, 0, alice, deadline);
         vm.stopPrank();
     }
 
@@ -151,16 +111,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         uint256 deadline = block.timestamp;
 
         vm.startPrank(alice);
-        (,, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        (,, uint256 liq) = router.addLiquidity(address(tokenA), address(tokenB), a, b, 0, 0, alice, deadline);
         vm.stopPrank();
 
         MiniAmmPair p = _pair();
@@ -190,16 +141,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         uint256 deadline = block.timestamp;
 
         vm.startPrank(alice);
-        (,, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0,
-            0,
-            alice,
-            deadline
-        );
+        (,, uint256 liq) = router.addLiquidity(address(tokenA), address(tokenB), a, b, 0, 0, alice, deadline);
         vm.stopPrank();
 
         MiniAmmPair p = _pair();
@@ -228,16 +170,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
 
         // Create LP first
         vm.startPrank(alice);
-        (,, uint256 liq) = router.addLiquidity(
-            address(tokenA),
-            address(tokenB),
-            a,
-            b,
-            0,
-            0,
-            alice,
-            block.timestamp
-        );
+        (,, uint256 liq) = router.addLiquidity(address(tokenA), address(tokenB), a, b, 0, 0, alice, block.timestamp);
         vm.stopPrank();
 
         MiniAmmPair p = _pair();
@@ -248,15 +181,7 @@ contract MiniAmmRouter_RemoveLiquidity_v0_Test is RouterFixture {
         p.approve(address(router), liq);
 
         vm.expectRevert(MiniAmmRouter.Expired.selector);
-        router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            liq,
-            0,
-            0,
-            alice,
-            expired
-        );
+        router.removeLiquidity(address(tokenA), address(tokenB), liq, 0, 0, alice, expired);
         vm.stopPrank();
     }
 }
