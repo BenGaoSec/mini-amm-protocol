@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {IMiniAmmPair} from "../interfaces/IMiniAmmPair.sol";
-import {IMiniAmmFactory} from "../interfaces/IMiniAmmFactory.sol";
 import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {IMiniAmmCallee} from "../interfaces/IMiniAmmCallee.sol";
 import {AmmMath} from "../libraries/AmmMath.sol";

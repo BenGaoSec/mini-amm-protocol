@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
+import {FlashBorrower} from "src/periphery/FlashBorrower.sol";
 import {MiniAmmPair} from "src/core/MiniAmmPair.sol";
 import {MockERC20} from "test/mocks/MockERC20.sol";
 
@@ -9,6 +10,7 @@ contract Handler is Test {
     MockERC20 public token0;
     MockERC20 public token1;
     MiniAmmPair public pair;
+    FlashBorrower public flashBorrower;
 
     // Ghost Variables: The "Ledger of Truth"
     uint256 public ghost_depositSum0;
@@ -16,10 +18,11 @@ contract Handler is Test {
     uint256 public ghost_kLast; // Baseline K after last liquidity change
     uint256 public ghost_Swap_kLast; // Snapshot K right before a swap
 
-    constructor(MiniAmmPair _pair, MockERC20 _token0, MockERC20 _token1) {
+    constructor(MiniAmmPair _pair, FlashBorrower _flashBorrower, MockERC20 _token0, MockERC20 _token1) {
         token0 = _token0;
         token1 = _token1;
         pair = _pair;
+        flashBorrower = _flashBorrower;
     }
 
     function deposit(uint256 amount0, uint256 amount1) public {
@@ -78,22 +81,39 @@ contract Handler is Test {
         uint256 amountTransfer = pair.balanceOf(address(this));
         if (amountTransfer == 0) return;
         pair.transfer(address(pair), amountTransfer);
-        (uint256 amount0,uint256 amount1) = pair.burn(address(this));
+        (uint256 amount0, uint256 amount1) = pair.burn(address(this));
         ghost_depositSum0 = (amount0 > ghost_depositSum0) ? 0 : ghost_depositSum0 - amount0;
         ghost_depositSum1 = (amount1 > ghost_depositSum1) ? 0 : ghost_depositSum1 - amount1;
         (uint112 r0, uint112 r1,) = pair.getReserves();
         ghost_kLast = uint256(r0) * uint256(r1);
+        ghost_Swap_kLast = uint256(r0) * uint256(r1);
+
     }
 
-    /**
-     * LEVEL 6: THE ATTACKER MODULE
-     * Simulates "Direct Transfer Attack" bypassing the Pair interface.
-     */
-    /**
-     * [ ] Handler.sol exposes sync() and skim() to the fuzzer.
-     * [ ] Handler.sol properly bounds forcePush amounts to avoid "boring" overflows
-     * (stay within $1e25$ range).
-     */
+    function flashSwap(uint256 amountToBorrow, bool borrowToken0) public {
+        (uint112 r0, uint112 r1,) = pair.getReserves();
+        if (borrowToken0) {
+            amountToBorrow = bound(amountToBorrow, 1, uint256(r0) * 9 / 10);
+        } else {
+            amountToBorrow = bound(amountToBorrow, 1, uint256(r1) * 9 / 10);
+        }
+        uint256 amount0Out = borrowToken0 ? amountToBorrow : 0;
+        uint256 amount1Out = borrowToken0 ? 0 : amountToBorrow;
+        pair.swap(amount0Out, amount1Out, address(flashBorrower), "flashLoan");
+
+        (r0, r1,) = pair.getReserves();
+        ghost_kLast = uint256(r0) * uint256(r1);
+
+        uint256 amountRepaid = (amountToBorrow * 1000) / 997 + 1;
+        uint256 feePaid = amountRepaid - amountToBorrow;
+
+        if (borrowToken0) {
+            ghost_depositSum0 += feePaid;
+        } else {
+            ghost_depositSum1 += feePaid;
+        }
+    }
+
     // inject 1-1e20 tokens to pool.
     function forcePush(bool ZeroForOne, uint256 amountInput) public {
         MockERC20 inputToken = ZeroForOne ? token0 : token1;

@@ -4,14 +4,19 @@ pragma solidity ^0.8.20;
 import "forge-std/console.sol";
 import "forge-std/StdInvariant.sol";
 import {PairFixture} from "test/fixtures/PairFixture.t.sol";
+import {FlashBorrower} from "src/periphery/FlashBorrower.sol";
 import {Handler} from "test/handlers/Handler.sol";
 
 contract InvariantTest is StdInvariant, PairFixture {
     Handler public handler;
+    FlashBorrower public flashBorrower;
 
     function setUp() public override {
         super.setUp(); // Deploys pair, token0, token1 from Fixture
-        handler = new Handler(pair, token0, token1);
+        flashBorrower = new FlashBorrower(pair, address(token0), address(token1));
+        handler = new Handler(pair, flashBorrower, token0, token1);
+        token0.mint(address(flashBorrower), 10e19);
+        token1.mint(address(flashBorrower), 10e19);
 
         // Target the Handler, not the Pair directly
         targetContract(address(handler));
@@ -46,17 +51,17 @@ contract InvariantTest is StdInvariant, PairFixture {
     // This is what breaks when someone does a Direct Transfer (forcePush)
 
     function invariant_reserveMatch() public {
-    (uint112 r0, uint112 r1, ) = pair.getReserves();
-    uint256 b0 = token0.balanceOf(address(pair));
-    uint256 b1 = token1.balanceOf(address(pair));
-    if(r0>b0 || r1>b1) {
-        console.log("--- CRITICAL FAILURE ---");
-        console.log("Token0 Balance:", b0, "Reserve:", r0);
-        console.log("Token1 Balance:", b1, "Reserve:", r1);
-        fail();
-    }
+        (uint112 r0, uint112 r1,) = pair.getReserves();
+        uint256 b0 = token0.balanceOf(address(pair));
+        uint256 b1 = token1.balanceOf(address(pair));
+        if (r0 > b0 || r1 > b1) {
+            console.log("--- CRITICAL FAILURE ---");
+            console.log("Token0 Balance:", b0, "Reserve:", r0);
+            console.log("Token1 Balance:", b1, "Reserve:", r1);
+            fail();
+        }
 
-    assertGe(b0,r0,"Solvency : Token0 missing");
-    assertGe(b1,r1,"Solvency : Token1 missing");
-}
+        assertGe(b0, r0, "Solvency : Token0 missing");
+        assertGe(b1, r1, "Solvency : Token1 missing");
+    }
 }

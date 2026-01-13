@@ -1,7 +1,1 @@
-{
-  "solidity.packageDefaultDependenciesDirectory": "lib",
-  "solidity.packageDefaultDependenciesContractsDirectory": "src",
-  "solidity.remappings": [
-    "forge-std/=lib/forge-std/src/"
-  ]
-}
+forge-std/=lib/forge-std/src/
